@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureVision - Anomaly Detection System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 100%);
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            height: 100vh;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .main-display {
+            background: #1e1e1e;
+            border-radius: 15px;
+            border: 2px solid #333;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(0, 255, 255, 0.1);
+        }
+
+        .display-header {
+            background: linear-gradient(90deg, #00ff88 0%, #00ccff 100%);
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #000;
+            font-weight: 600;
+        }
+
+        .camera-feed {
+            height: calc(100% - 60px);
+            position: relative;
+            background: radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 100%);
+            overflow: hidden;
+        }
+
+        .object {
+            position: absolute;
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            transition: all 0.1s ease;
+            box-shadow: 0 0 15px currentColor;
+            z-index: 10;
+        }
+
+        .normal { 
+            background: #00ff88; 
+            border: 2px solid #00ff88;
+        }
+        .loitering { 
+            background: #ffaa00; 
+            border: 2px solid #ffaa00;
+            animation: pulse 1s infinite;
+        }
+        .erratic { 
+            background: #ff4444; 
+            border: 2px solid #ff4444;
+            animation: shake 0.5s infinite;
+        }
+        .speeding { 
+            background: #ff00ff; 
+            border: 2px solid #ff00ff;
+            animation: speed-pulse 0.3s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.3); opacity: 1; }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-2px) rotate(-5deg); }
+            75% { transform: translateX(2px) rotate(5deg); }
+        }
+
+        @keyframes speed-pulse {
+            0%, 100% { box-shadow: 0 0 15px currentColor; }
+            50% { box-shadow: 0 0 30px currentColor, 0 0 40px currentColor; }
+        }
+
+        .trajectory {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .object-label {
+            position: absolute;
+            top: -25px;
+            left: -10px;
+            font-size: 10px;
+            font-weight: 600;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .control-panel {
+            background: #1e1e1e;
+            border-radius: 15px;
+            border: 2px solid #333;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: linear-gradient(90deg, #333 0%, #555 100%);
+            padding: 15px;
+            font-weight: 600;
+            font-size: 18px;
+            text-align: center;
+            border-bottom: 1px solid #444;
+        }
+
+        .panel-content {
+            padding: 20px;
+        }
+
+        .control-group {
+            margin-bottom: 25px;
+        }
+
+        .control-label {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #00ff88;
+            font-size: 14px;
+        }
+
+        .access-control {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .access-btn {
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+
+        .access-up {
+            background: linear-gradient(135deg, #00ff88 0%, #00cc66 100%);
+            color: #000;
+        }
+
+        .access-up:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 255, 136, 0.3);
+        }
+
+        .access-down {
+            background: linear-gradient(135deg, #ff4444 0%, #cc3333 100%);
+            color: #fff;
+        }
+
+        .access-down:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(255, 68, 68, 0.3);
+        }
+
+        .slider-container {
+            margin: 15px 0;
+        }
+
+        .slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #333;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #00ff88 0%, #00ccff 100%);
+            cursor: pointer;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #333;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #aaa;
+        }
+
+        .alert-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+
+        .alert-normal { background: rgba(0, 255, 136, 0.1); border-left: 3px solid #00ff88; }
+        .alert-warning { background: rgba(255, 170, 0, 0.1); border-left: 3px solid #ffaa00; }
+        .alert-danger { background: rgba(255, 68, 68, 0.1); border-left: 3px solid #ff4444; }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: blink 2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        .status-online {
+            color: #00ff88;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0.1;
+            background-image: 
+                linear-gradient(rgba(0, 255, 255, 0.2) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 0.2) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        .timestamp {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-display">
+            <div class="display-header">
+                <div>
+                    <span style="font-size: 20px;">🔒 SecureVision</span>
+                    <span style="margin-left: 20px; font-size: 14px;">Camera Feed #1 - Main Entrance</span>
+                </div>
+                <div class="system-status">
+                    <div class="status-indicator" style="background: #00ff88;"></div>
+                    <span class="status-online">SYSTEM ONLINE</span>
+                </div>
+            </div>
+            <div class="camera-feed" id="cameraFeed">
+                <div class="grid-overlay"></div>
+                <div class="timestamp" id="timestamp"></div>
+                <svg class="trajectory" id="trajectorySvg" width="100%" height="100%"></svg>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <div class="panel-header">
+                🎛️ CONTROL CENTER
+            </div>
+            <div class="panel-content">
+                <div class="control-group">
+                    <div class="control-label">ACCESS CONTROL</div>
+                    <div class="access-control">
+                        <button class="access-btn access-up" onclick="toggleAccess(true)">
+                            ⬆️ GRANT ACCESS
+                        </button>
+                        <button class="access-btn access-down" onclick="toggleAccess(false)">
+                            ⬇️ DENY ACCESS
+                        </button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">DETECTION SENSITIVITY</div>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="sensitivitySlider" min="1" max="10" value="5">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #666;">
+                            <span>Low</span><span>High</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">TRACKING SPEED</div>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="speedSlider" min="1" max="10" value="5">
+                        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #666;">
+                            <span>Slow</span><span>Fast</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="objectCount">0</div>
+                        <div class="stat-label">TRACKED OBJECTS</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="anomalyCount">0</div>
+                        <div class="stat-label">ANOMALIES</div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">REAL-TIME ALERTS</div>
+                    <div class="alert-list" id="alertList">
+                        <div class="alert-item alert-normal">
+                            <div class="status-indicator" style="background: #00ff88;"></div>
+                            System initialized successfully
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class AnomalyDetectionSystem {
+            constructor() {
+                this.objects = new Map();
+                this.trajectories = new Map();
+                this.objectIdCounter = 1;
+                this.anomalyCount = 0;
+                this.accessGranted = true;
+                this.sensitivity = 5;
+                this.trackingSpeed = 5;
+                
+                this.cameraFeed = document.getElementById('cameraFeed');
+                this.trajectorySvg = document.getElementById('trajectorySvg');
+                
+                this.initializeSystem();
+                this.startSimulation();
+                this.updateTimestamp();
+            }
+
+            initializeSystem() {
+                // Initialize sliders
+                document.getElementById('sensitivitySlider').addEventListener('input', (e) => {
+                    this.sensitivity = parseInt(e.target.value);
+                    this.addAlert(`Sensitivity adjusted to level ${this.sensitivity}`, 'normal');
+                });
+
+                document.getElementById('speedSlider').addEventListener('input', (e) => {
+                    this.trackingSpeed = parseInt(e.target.value);
+                    this.addAlert(`Tracking speed set to ${this.trackingSpeed}`, 'normal');
+                });
+            }
+
+            createObject(x, y) {
+                const objectId = `obj_${this.objectIdCounter++}`;
+                const objectElement = document.createElement('div');
+                objectElement.className = 'object normal';
+                objectElement.id = objectId;
+                
+                const label = document.createElement('div');
+                label.className = 'object-label';
+                label.textContent = `ID: ${objectId}`;
+                objectElement.appendChild(label);
+                
+                this.cameraFeed.appendChild(objectElement);
+                
+                const objectData = {
+                    element: objectElement,
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 4,
+                    vy: (Math.random() - 0.5) * 4,
+                    trajectory: [],
+                    loiterTime: 0,
+                    lastDirection: null,
+                    directionChanges: 0,
+                    speed: 0,
+                    anomalyType: 'normal',
+                    creationTime: Date.now()
+                };
+                
+                this.objects.set(objectId, objectData);
+                this.trajectories.set(objectId, []);
+                
+                this.updatePosition(objectId, x, y);
+                return objectId;
+            }
+
+            updatePosition(objectId, x, y) {
+                const obj = this.objects.get(objectId);
+                if (!obj) return;
+                
+                obj.x = x;
+                obj.y = y;
+                obj.element.style.left = `${x}px`;
+                obj.element.style.top = `${y}px`;
+                
+                // Store trajectory
+                const trajectory = this.trajectories.get(objectId);
+                trajectory.push({x, y, timestamp: Date.now()});
+                
+                // Keep only last 20 points
+                if (trajectory.length > 20) {
+                    trajectory.shift();
+                }
+                
+                // Update trajectory visualization
+                this.drawTrajectory(objectId, trajectory);
+            }
+
+            drawTrajectory(objectId, trajectory) {
+                // Remove existing trajectory
+                const existingPath = document.querySelector(`#trajectory-${objectId}`);
+                if (existingPath) {
+                    existingPath.remove();
+                }
+                
+                if (trajectory.length < 2) return;
+                
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.id = `trajectory-${objectId}`;
+                
+                let d = `M ${trajectory[0].x} ${trajectory[0].y}`;
+                for (let i = 1; i < trajectory.length; i++) {
+                    d += ` L ${trajectory[i].x} ${trajectory[i].y}`;
+                }
+                
+                path.setAttribute('d', d);
+                path.setAttribute('stroke', this.getTrajectoryColor(objectId));
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('fill', 'none');
+                path.setAttribute('opacity', '0.6');
+                
+                this.trajectorySvg.appendChild(path);
+            }
+
+            getTrajectoryColor(objectId) {
+                const obj = this.objects.get(objectId);
+                switch (obj.anomalyType) {
+                    case 'loitering': return '#ffaa00';
+                    case 'erratic': return '#ff4444';
+                    case 'speeding': return '#ff00ff';
+                    default: return '#00ff88';
+                }
+            }
+
+            detectAnomalies(objectId) {
+                const obj = this.objects.get(objectId);
+                const trajectory = this.trajectories.get(objectId);
+                if (!obj || trajectory.length < 5) return;
+
+                const currentTime = Date.now();
+                const oldAnomalyType = obj.anomalyType;
+
+                // Calculate current speed
+                const recentPoints = trajectory.slice(-3);
+                if (recentPoints.length >= 2) {
+                    const dx = recentPoints[recentPoints.length - 1].x - recentPoints[0].x;
+                    const dy = recentPoints[recentPoints.length - 1].y - recentPoints[0].y;
+                    obj.speed = Math.sqrt(dx * dx + dy * dy);
+                }
+
+                // Reset anomaly type
+                obj.anomalyType = 'normal';
+
+                // Loitering detection
+                if (obj.speed < 1.5) {
+                    obj.loiterTime += 100;
+                    if (obj.loiterTime > 3000 / this.sensitivity) {
+                        obj.anomalyType = 'loitering';
+                    }
+                } else {
+                    obj.loiterTime = 0;
+                }
+
+                // Erratic movement detection
+                if (trajectory.length >= 5) {
+                    let directionChanges = 0;
+                    for (let i = 1; i < trajectory.length - 1; i++) {
+                        const prev = trajectory[i - 1];
+                        const curr = trajectory[i];
+                        const next = trajectory[i + 1];
+                        
+                        const angle1 = Math.atan2(curr.y - prev.y, curr.x - prev.x);
+                        const angle2 = Math.atan2(next.y - curr.y, next.x - curr.x);
+                        const angleDiff = Math.abs(angle1 - angle2);
+                        
+                        if (angleDiff > Math.PI / 3 && angleDiff < 5 * Math.PI / 3) {
+                            directionChanges++;
+                        }
+                    }
+                    
+                    if (directionChanges > 2 + (10 - this.sensitivity)) {
+                        obj.anomalyType = 'erratic';
+                    }
+                }
+
+                // Speed anomaly detection
+                if (obj.speed > 8 + this.sensitivity) {
+                    obj.anomalyType = 'speeding';
+                }
+
+                // Update visual appearance
+                obj.element.className = `object ${obj.anomalyType}`;
+
+                // Log new anomalies
+                if (obj.anomalyType !== 'normal' && oldAnomalyType !== obj.anomalyType) {
+                    this.anomalyCount++;
+                    this.addAlert(`${objectId}: ${obj.anomalyType.toUpperCase()} detected`, 'warning');
+                    document.getElementById('anomalyCount').textContent = this.anomalyCount;
+                }
+            }
+
+            addAlert(message, type = 'normal') {
+                const alertList = document.getElementById('alertList');
+                const alertItem = document.createElement('div');
+                alertItem.className = `alert-item alert-${type}`;
+                
+                const indicator = document.createElement('div');
+                indicator.className = 'status-indicator';
+                indicator.style.background = type === 'normal' ? '#00ff88' : 
+                                           type === 'warning' ? '#ffaa00' : '#ff4444';
+                
+                alertItem.appendChild(indicator);
+                alertItem.appendChild(document.createTextNode(`${new Date().toLocaleTimeString()}: ${message}`));
+                
+                alertList.insertBefore(alertItem, alertList.firstChild);
+                
+                // Keep only last 10 alerts
+                while (alertList.children.length > 10) {
+                    alertList.removeChild(alertList.lastChild);
+                }
+            }
+
+            updateSimulation() {
+                // Create new objects more frequently and ensure they're visible
+                if (Math.random() < 0.02 && this.objects.size < 8) {
+                    const feedRect = this.cameraFeed.getBoundingClientRect();
+                    const x = Math.random() * (feedRect.width - 40) + 20;
+                    const y = Math.random() * (feedRect.height - 40) + 20;
+                    this.createObject(x, y);
+                }
+                
+                // If no objects exist, force create one
+                if (this.objects.size === 0) {
+                    const feedRect = this.cameraFeed.getBoundingClientRect();
+                    this.createObject(100, 100);
+                    this.createObject(300, 200);
+                    this.createObject(500, 150);
+                }
+
+                // Update existing objects
+                for (const [objectId, obj] of this.objects.entries()) {
+                    // Update velocity with some randomness
+                    obj.vx += (Math.random() - 0.5) * 0.5;
+                    obj.vy += (Math.random() - 0.5) * 0.5;
+                    
+                    // Speed factor from control
+                    const speedFactor = this.trackingSpeed / 5;
+                    obj.vx *= speedFactor;
+                    obj.vy *= speedFactor;
+                    
+                    // Limit velocity
+                    obj.vx = Math.max(-6, Math.min(6, obj.vx));
+                    obj.vy = Math.max(-6, Math.min(6, obj.vy));
+                    
+                    // Update position
+                    let newX = obj.x + obj.vx;
+                    let newY = obj.y + obj.vy;
+                    
+                    // Bounce off walls
+                    if (newX < 0 || newX > this.cameraFeed.offsetWidth - 40) {
+                        obj.vx *= -1;
+                        newX = Math.max(0, Math.min(this.cameraFeed.offsetWidth - 40, newX));
+                    }
+                    if (newY < 0 || newY > this.cameraFeed.offsetHeight - 40) {
+                        obj.vy *= -1;
+                        newY = Math.max(0, Math.min(this.cameraFeed.offsetHeight - 40, newY));
+                    }
+                    
+                    this.updatePosition(objectId, newX, newY);
+                    this.detectAnomalies(objectId);
+                    
+                    // Remove old objects
+                    if (Date.now() - obj.creationTime > 30000) {
+                        this.removeObject(objectId);
+                    }
+                }
+                
+                // Update object count
+                document.getElementById('objectCount').textContent = this.objects.size;
+            }
+
+            removeObject(objectId) {
+                const obj = this.objects.get(objectId);
+                if (obj) {
+                    obj.element.remove();
+                    this.objects.delete(objectId);
+                    this.trajectories.delete(objectId);
+                    
+                    // Remove trajectory
+                    const trajectoryPath = document.querySelector(`#trajectory-${objectId}`);
+                    if (trajectoryPath) {
+                        trajectoryPath.remove();
+                    }
+                }
+            }
+
+            startSimulation() {
+                setInterval(() => {
+                    this.updateSimulation();
+                }, 100);
+            }
+
+            updateTimestamp() {
+                setInterval(() => {
+                    document.getElementById('timestamp').textContent = 
+                        new Date().toLocaleString();
+                }, 1000);
+            }
+        }
+
+        // Global functions for controls
+        function toggleAccess(granted) {
+            const system = window.anomalySystem;
+            system.accessGranted = granted;
+            const message = granted ? 'Access GRANTED' : 'Access DENIED';
+            const type = granted ? 'normal' : 'danger';
+            system.addAlert(message, type);
+        }
+
+        // Initialize system
+        window.onload = function() {
+            window.anomalySystem = new AnomalyDetectionSystem();
+            
+            // Force create initial objects after a short delay
+            setTimeout(() => {
+                const system = window.anomalySystem;
+                system.createObject(150, 120);
+                system.createObject(350, 180);
+                system.createObject(250, 250);
+                system.addAlert('Initial objects created', 'normal');
+            }, 500);
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Geo-Fencing & Virtual Intrusion Detection System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #0a0a0a, #1a1a2e, #16213e);
+            color: #00ff41;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 350px;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+            gap: 2px;
+            background: #000;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            background: linear-gradient(90deg, #0f3460, #533483);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            border-bottom: 2px solid #00ff41;
+            box-shadow: 0 2px 20px rgba(0, 255, 65, 0.3);
+        }
+
+        .header h1 {
+            color: #00ff41;
+            font-size: 18px;
+            text-shadow: 0 0 10px #00ff41;
+            letter-spacing: 2px;
+        }
+
+        .status-indicators {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .status-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-light.active { background: #00ff41; }
+        .status-light.warning { background: #ff9500; }
+        .status-light.alert { background: #ff0000; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .main-display {
+            background: #000;
+            position: relative;
+            overflow: hidden;
+            border: 2px solid #00ff41;
+            box-shadow: inset 0 0 50px rgba(0, 255, 65, 0.1);
+        }
+
+        .video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 30% 40%, rgba(0, 100, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 70% 60%, rgba(255, 0, 100, 0.1) 0%, transparent 50%),
+                linear-gradient(45deg, transparent 49%, rgba(0, 255, 65, 0.03) 50%, transparent 51%);
+            background-size: 100% 100%, 100% 100%, 20px 20px;
+        }
+
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(0, 255, 65, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 65, 0.1) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+        }
+
+        .zone {
+            position: absolute;
+            border: 2px solid;
+            border-radius: 10px;
+            backdrop-filter: blur(2px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .zone.safe {
+            border-color: #00ff41;
+            background: rgba(0, 255, 65, 0.05);
+        }
+
+        .zone.restricted {
+            border-color: #ff9500;
+            background: rgba(255, 149, 0, 0.1);
+            box-shadow: 0 0 20px rgba(255, 149, 0, 0.3);
+        }
+
+        .zone.no-fly {
+            border-color: #ff0000;
+            background: rgba(255, 0, 0, 0.1);
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.5);
+            animation: danger-pulse 2s infinite;
+        }
+
+        @keyframes danger-pulse {
+            0%, 100% { border-color: #ff0000; }
+            50% { border-color: #ff6666; }
+        }
+
+        .zone-label {
+            position: absolute;
+            top: -25px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .drone {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #00ff41;
+            border-radius: 50%;
+            box-shadow: 0 0 15px #00ff41;
+            transition: all 0.5s ease;
+            z-index: 100;
+        }
+
+        .drone.unknown { background: #ff9500; box-shadow: 0 0 15px #ff9500; }
+        .drone.hostile { background: #ff0000; box-shadow: 0 0 15px #ff0000; }
+
+        .drone::after {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            right: -3px;
+            bottom: -3px;
+            border: 2px solid currentColor;
+            border-radius: 50%;
+            opacity: 0.5;
+            animation: radar-sweep 3s infinite;
+        }
+
+        @keyframes radar-sweep {
+            0% { transform: scale(1); opacity: 0.5; }
+            100% { transform: scale(3); opacity: 0; }
+        }
+
+        .trail {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: currentColor;
+            border-radius: 50%;
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        .control-panel {
+            background: linear-gradient(180deg, #0f3460, #16213e);
+            border-left: 2px solid #00ff41;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .panel-section {
+            margin-bottom: 25px;
+            border: 1px solid rgba(0, 255, 65, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .panel-section h3 {
+            color: #00ff41;
+            font-size: 14px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid rgba(0, 255, 65, 0.3);
+            padding-bottom: 5px;
+        }
+
+        .alert-item {
+            background: rgba(255, 0, 0, 0.1);
+            border-left: 4px solid #ff0000;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+            animation: alert-flash 1s ease-in-out;
+        }
+
+        @keyframes alert-flash {
+            0% { background: rgba(255, 0, 0, 0.3); }
+            100% { background: rgba(255, 0, 0, 0.1); }
+        }
+
+        .alert-time {
+            color: #ff6666;
+            font-size: 10px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stat-item {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            color: #00ff41;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 10px;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .detected-objects {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .object-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin-bottom: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .object-id {
+            color: #00ff41;
+            font-weight: bold;
+        }
+
+        .object-status {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .status-safe { background: #00ff41; color: #000; }
+        .status-warning { background: #ff9500; color: #000; }
+        .status-danger { background: #ff0000; color: #fff; }
+
+        .coordinates {
+            font-size: 10px;
+            color: #888;
+            margin-top: 2px;
+        }
+
+        .radar-sweep {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border: 2px solid rgba(0, 255, 65, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: radar-pulse 4s infinite;
+        }
+
+        @keyframes radar-pulse {
+            0% { 
+                width: 0;
+                height: 0;
+                opacity: 1;
+            }
+            100% { 
+                width: 800px;
+                height: 800px;
+                opacity: 0;
+            }
+        }
+
+        .crosshair {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 2px solid #00ff41;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0;
+            transition: all 0.3s ease;
+        }
+
+        .crosshair.active {
+            opacity: 1;
+            animation: crosshair-lock 0.5s ease-out;
+        }
+
+        @keyframes crosshair-lock {
+            0% { transform: scale(2); }
+            100% { transform: scale(1); }
+        }
+
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: #00ff41;
+        }
+
+        .crosshair::before {
+            width: 20px;
+            height: 2px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .crosshair::after {
+            width: 2px;
+            height: 20px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚡ ADVANCED GEO-FENCING & INTRUSION DETECTION SYSTEM ⚡</h1>
+            <div class="status-indicators">
+                <div class="status-light active"></div>
+                <span>ACTIVE</span>
+                <div class="status-light warning" id="warningLight"></div>
+                <span>ALERTS</span>
+                <div class="status-light alert" id="alertLight"></div>
+                <span>THREATS</span>
+            </div>
+        </div>
+
+        <div class="main-display">
+            <div class="video-overlay"></div>
+            <div class="grid-overlay"></div>
+            <div class="radar-sweep"></div>
+            <div class="crosshair" id="crosshair"></div>
+            
+            <!-- Virtual Zones -->
+            <div class="zone safe" style="top: 60%; left: 10%; width: 25%; height: 30%;">
+                <div class="zone-label" style="color: #00ff41;">Safe Zone - Base</div>
+            </div>
+            <div class="zone restricted" style="top: 20%; left: 40%; width: 35%; height: 25%;">
+                <div class="zone-label" style="color: #ff9500;">Restricted Airspace</div>
+            </div>
+            <div class="zone no-fly" style="top: 10%; left: 70%; width: 25%; height: 40%;">
+                <div class="zone-label" style="color: #ff0000;">No-Fly Zone</div>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <div class="panel-section">
+                <h3>🚨 Real-Time Alerts</h3>
+                <div id="alertsContainer">
+                    <div class="alert-item">
+                        <div>ZONE BREACH: Unknown object in restricted airspace</div>
+                        <div class="alert-time">12:34:56</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>📊 System Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="totalDetected">7</div>
+                        <div class="stat-label">Detected</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="activeThreat">2</div>
+                        <div class="stat-label">Threats</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="zoneBreaches">3</div>
+                        <div class="stat-label">Breaches</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">98%</div>
+                        <div class="stat-label">Accuracy</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>🎯 Detected Objects</h3>
+                <div class="detected-objects" id="objectsList">
+                    <!-- Objects will be populated by JavaScript -->
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>🗺️ Zone Status</h3>
+                <div class="object-item">
+                    <div>
+                        <div class="object-id">Safe Zone</div>
+                        <div class="coordinates">Base Perimeter</div>
+                    </div>
+                    <div class="object-status status-safe">Secure</div>
+                </div>
+                <div class="object-item">
+                    <div>
+                        <div class="object-id">Restricted Zone</div>
+                        <div class="coordinates">Airspace Alpha</div>
+                    </div>
+                    <div class="object-status status-warning">Breach</div>
+                </div>
+                <div class="object-item">
+                    <div>
+                        <div class="object-id">No-Fly Zone</div>
+                        <div class="coordinates">Critical Area</div>
+                    </div>
+                    <div class="object-status status-danger">Violation</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class IntrusionDetectionSystem {
+            constructor() {
+                this.drones = [];
+                this.trails = [];
+                this.alertCount = 0;
+                this.detectedCount = 7;
+                this.threatCount = 2;
+                this.breachCount = 3;
+                
+                this.zones = [
+                    { name: 'Safe Zone', type: 'safe', x: 10, y: 60, width: 25, height: 30 },
+                    { name: 'Restricted Airspace', type: 'restricted', x: 40, y: 20, width: 35, height: 25 },
+                    { name: 'No-Fly Zone', type: 'no-fly', x: 70, y: 10, width: 25, height: 40 }
+                ];
+
+                this.init();
+                this.startSimulation();
+            }
+
+            init() {
+                this.display = document.querySelector('.main-display');
+                this.alertsContainer = document.getElementById('alertsContainer');
+                this.objectsList = document.getElementById('objectsList');
+                this.crosshair = document.getElementById('crosshair');
+                
+                // Create initial drones
+                this.createDrone(30, 40, 'friendly');
+                this.createDrone(60, 30, 'unknown');
+                this.createDrone(80, 25, 'hostile');
+                this.createDrone(20, 70, 'friendly');
+                this.createDrone(50, 35, 'unknown');
+                
+                this.updateObjectsList();
+            }
+
+            createDrone(x, y, type = 'friendly') {
+                const drone = document.createElement('div');
+                drone.className = `drone ${type}`;
+                drone.style.left = x + '%';
+                drone.style.top = y + '%';
+                
+                const droneData = {
+                    element: drone,
+                    x: x,
+                    y: y,
+                    type: type,
+                    id: 'D-' + Math.random().toString(36).substr(2, 4).toUpperCase(),
+                    vx: (Math.random() - 0.5) * 0.5,
+                    vy: (Math.random() - 0.5) * 0.5,
+                    status: 'clear'
+                };
+
+                this.drones.push(droneData);
+                this.display.appendChild(drone);
+                
+                // Add click event for targeting
+                drone.addEventListener('click', (e) => {
+                    this.targetDrone(e, droneData);
+                });
+
+                return droneData;
+            }
+
+            targetDrone(event, droneData) {
+                const rect = this.display.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                const y = event.clientY - rect.top;
+                
+                this.crosshair.style.left = (x - 20) + 'px';
+                this.crosshair.style.top = (y - 20) + 'px';
+                this.crosshair.classList.add('active');
+                
+                setTimeout(() => {
+                    this.crosshair.classList.remove('active');
+                }, 2000);
+
+                this.addAlert(`TARGET ACQUIRED: ${droneData.id} locked`, 'warning');
+            }
+
+            moveDrones() {
+                this.drones.forEach(drone => {
+                    // Update position
+                    drone.x += drone.vx;
+                    drone.y += drone.vy;
+
+                    // Boundary checking
+                    if (drone.x < 0 || drone.x > 100) drone.vx *= -1;
+                    if (drone.y < 0 || drone.y > 100) drone.vy *= -1;
+
+                    drone.x = Math.max(0, Math.min(100, drone.x));
+                    drone.y = Math.max(0, Math.min(100, drone.y));
+
+                    // Create trail
+                    this.createTrail(drone);
+
+                    // Update DOM position
+                    drone.element.style.left = drone.x + '%';
+                    drone.element.style.top = drone.y + '%';
+
+                    // Check zone violations
+                    this.checkZoneViolations(drone);
+                });
+            }
+
+            createTrail(drone) {
+                const trail = document.createElement('div');
+                trail.className = 'trail';
+                trail.style.left = drone.x + '%';
+                trail.style.top = drone.y + '%';
+                trail.style.background = drone.type === 'hostile' ? '#ff0000' : 
+                                       drone.type === 'unknown' ? '#ff9500' : '#00ff41';
+                
+                this.display.appendChild(trail);
+                
+                // Remove trail after animation
+                setTimeout(() => {
+                    if (trail.parentNode) {
+                        trail.parentNode.removeChild(trail);
+                    }
+                }, 3000);
+            }
+
+            checkZoneViolations(drone) {
+                const previousStatus = drone.status;
+                drone.status = 'clear';
+
+                this.zones.forEach(zone => {
+                    if (this.isInZone(drone, zone)) {
+                        if (zone.type === 'no-fly') {
+                            drone.status = 'danger';
+                            if (previousStatus !== 'danger') {
+                                this.addAlert(`🚨 NO-FLY VIOLATION: ${drone.id} entered restricted zone`, 'danger');
+                                this.breachCount++;
+                                this.updateStats();
+                            }
+                        } else if (zone.type === 'restricted' && drone.type !== 'friendly') {
+                            drone.status = 'warning';
+                            if (previousStatus !== 'warning' && previousStatus !== 'danger') {
+                                this.addAlert(`⚠️ RESTRICTED BREACH: ${drone.id} in controlled airspace`, 'warning');
+                                this.breachCount++;
+                                this.updateStats();
+                            }
+                        }
+                    }
+                });
+
+                // Update drone appearance based on status
+                drone.element.className = `drone ${drone.type} ${drone.status}`;
+            }
+
+            isInZone(drone, zone) {
+                return drone.x >= zone.x && 
+                       drone.x <= zone.x + zone.width &&
+                       drone.y >= zone.y && 
+                       drone.y <= zone.y + zone.height;
+            }
+
+            addAlert(message, type = 'info') {
+                const alertElement = document.createElement('div');
+                alertElement.className = 'alert-item';
+                
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+                
+                alertElement.innerHTML = `
+                    <div>${message}</div>
+                    <div class="alert-time">${timeString}</div>
+                `;
+
+                this.alertsContainer.insertBefore(alertElement, this.alertsContainer.firstChild);
+                
+                // Keep only last 5 alerts
+                while (this.alertsContainer.children.length > 5) {
+                    this.alertsContainer.removeChild(this.alertsContainer.lastChild);
+                }
+
+                this.alertCount++;
+                this.updateIndicators();
+            }
+
+            updateObjectsList() {
+                this.objectsList.innerHTML = '';
+                
+                this.drones.forEach(drone => {
+                    const item = document.createElement('div');
+                    item.className = 'object-item';
+                    
+                    const statusClass = drone.status === 'danger' ? 'status-danger' : 
+                                       drone.status === 'warning' ? 'status-warning' : 'status-safe';
+                    
+                    const statusText = drone.status === 'danger' ? 'THREAT' : 
+                                      drone.status === 'warning' ? 'WATCH' : 'CLEAR';
+                    
+                    item.innerHTML = `
+                        <div>
+                            <div class="object-id">${drone.id}</div>
+                            <div class="coordinates">${Math.round(drone.x)}%, ${Math.round(drone.y)}%</div>
+                        </div>
+                        <div class="object-status ${statusClass}">${statusText}</div>
+                    `;
+                    
+                    this.objectsList.appendChild(item);
+                });
+            }
+
+            updateStats() {
+                document.getElementById('totalDetected').textContent = this.detectedCount;
+                document.getElementById('activeThreat').textContent = this.threatCount;
+                document.getElementById('zoneBreaches').textContent = this.breachCount;
+            }
+
+            updateIndicators() {
+                const warningLight = document.getElementById('warningLight');
+                const alertLight = document.getElementById('alertLight');
+                
+                if (this.alertCount > 0) {
+                    warningLight.style.background = '#ff9500';
+                }
+                
+                if (this.drones.some(d => d.status === 'danger')) {
+                    alertLight.style.background = '#ff0000';
+                }
+            }
+
+            startSimulation() {
+                setInterval(() => {
+                    this.moveDrones();
+                    this.updateObjectsList();
+                }, 200);
+
+                // Randomly spawn new threats
+                setInterval(() => {
+                    if (Math.random() < 0.1 && this.drones.length < 8) {
+                        const edge = Math.floor(Math.random() * 4);
+                        let x, y;
+                        
+                        switch(edge) {
+                            case 0: x = 0; y = Math.random() * 100; break;
+                            case 1: x = 100; y = Math.random() * 100; break;
+                            case 2: x = Math.random() * 100; y = 0; break;
+                            case 3: x = Math.random() * 100; y = 100; break;
+                        }
+                        
+                        const type = Math.random() < 0.3 ? 'hostile' : 'unknown';
+                        this.createDrone(x, y, type);
+                        this.detectedCount++;
+                        if (type === 'hostile') this.threatCount++;
+                        this.updateStats();
+                        this.addAlert(`NEW CONTACT: ${type.toUpperCase()} object detected`, 'warning');
+                    }
+                }, 5000);
+
+                // System status updates
+                setInterval(() => {
+                    this.addAlert('🔄 System scan complete - All zones monitored', 'info');
+                }, 15000);
+            }
+        }
+
+        // Initialize the system when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new IntrusionDetectionSystem();
+        });
+    </script>
+</body>
+</html>
